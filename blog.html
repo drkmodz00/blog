@@ -1,0 +1,475 @@
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The 'Speed vs. Security' Trap: Lessons from a 72-Hour Breach</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Playfair+Display:ital,wght@0,600;0,700;1,600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    "on-secondary-fixed-variant": "#2f4b54",
+                    "on-surface-variant": "#43474c",
+                    "tertiary-fixed": "#ffddb7",
+                    "tertiary-fixed-dim": "#e3c19b",
+                    "surface-dim": "#dadada",
+                    "on-primary": "#ffffff",
+                    "on-tertiary-fixed-variant": "#5a4225",
+                    "on-tertiary": "#ffffff",
+                    "primary-fixed-dim": "#b5c8df",
+                    "surface-bright": "#f9f9f9",
+                    "on-primary-container": "#96a9be",
+                    "on-tertiary-container": "#c1a17d",
+                    "secondary-fixed-dim": "#aecbd7",
+                    "inverse-primary": "#b5c8df",
+                    "surface-container-highest": "#e2e2e2",
+                    "primary": "#162839",
+                    "outline": "#74777d",
+                    "tertiary-container": "#4e381c",
+                    "on-error": "#ffffff",
+                    "surface-tint": "#4e6073",
+                    "on-surface": "#1a1c1c",
+                    "tertiary": "#362308",
+                    "surface-container-high": "#e8e8e8",
+                    "surface-container": "#eeeeee",
+                    "background": "#f9f9f9",
+                    "secondary-container": "#c9e7f3",
+                    "inverse-on-surface": "#f0f1f1",
+                    "on-primary-fixed-variant": "#36485b",
+                    "primary-fixed": "#d1e4fb",
+                    "error-container": "#ffdad6",
+                    "on-tertiary-fixed": "#291802",
+                    "error": "#ba1a1a",
+                    "on-primary-fixed": "#091d2e",
+                    "surface-variant": "#e2e2e2",
+                    "on-error-container": "#93000a",
+                    "surface-container-lowest": "#ffffff",
+                    "on-background": "#1a1c1c",
+                    "surface-container-low": "#f3f3f3",
+                    "inverse-surface": "#2f3131",
+                    "on-secondary": "#ffffff",
+                    "outline-variant": "#c4c6cd",
+                    "secondary": "#47636c",
+                    "on-secondary-fixed": "#001f27",
+                    "secondary-fixed": "#c9e7f3",
+                    "primary-container": "#2c3e50",
+                    "on-secondary-container": "#4d6973",
+                    "surface": "#f9f9f9"
+                },
+                borderRadius: {
+                    DEFAULT: "0.125rem",
+                    lg: "0.25rem",
+                    xl: "0.5rem",
+                    full: "0.75rem"
+                },
+                spacing: {
+                    "stack-xl": "80px",
+                    "stack-lg": "48px",
+                    "gutter": "24px",
+                    "margin-mobile": "16px",
+                    "stack-sm": "8px",
+                    "article-max": "720px",
+                    "container-max": "1120px",
+                    "stack-md": "24px"
+                },
+                fontFamily: {
+                    "headline-md": ["Playfair Display", "serif"],
+                    "label-caps": ["Inter", "sans-serif"],
+                    "headline-sm": ["Playfair Display", "serif"],
+                    "display-lg": ["Playfair Display", "serif"],
+                    "meta": ["Inter", "sans-serif"],
+                    "display-lg-mobile": ["Playfair Display", "serif"],
+                    "body-lg": ["Inter", "sans-serif"],
+                    "body-md": ["Inter", "sans-serif"],
+                    "mono": ["IBM Plex Mono", "monospace"]
+                },
+                fontSize: {
+                    "headline-md": ["32px", { lineHeight: "1.3", fontWeight: "600" }],
+                    "label-caps": ["12px", { lineHeight: "1.0", letterSpacing: "0.1em", fontWeight: "600" }],
+                    "headline-sm": ["24px", { lineHeight: "1.4", fontWeight: "600" }],
+                    "display-lg": ["48px", { lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "700" }],
+                    "meta": ["14px", { lineHeight: "1.4", fontWeight: "400" }],
+                    "display-lg-mobile": ["32px", { lineHeight: "1.2", fontWeight: "700" }],
+                    "body-lg": ["18px", { lineHeight: "1.7", letterSpacing: "-0.01em", fontWeight: "400" }],
+                    "body-md": ["16px", { lineHeight: "1.6", fontWeight: "400" }]
+                }
+            }
+        }
+    }
+</script>
+<style>
+    body { background-color: theme('colors.background'); color: theme('colors.on-background'); }
+    .article-content p { margin-bottom: theme('spacing.stack-md'); }
+    .article-content ul, .article-content ol { margin-bottom: theme('spacing.stack-md'); padding-left: theme('spacing.stack-md'); }
+    .article-content li { margin-bottom: theme('spacing.stack-sm'); }
+    .glass-panel { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); border: 1px solid theme('colors.outline-variant'); }
+    a:focus-visible, button:focus-visible { outline: 2px solid theme('colors.primary'); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) {
+        * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+    }
+
+    /* --- Signature hero: browser chrome + IDOR address-bar exploit --- */
+    .browser-chrome {
+        background: theme('colors.surface-container-lowest');
+        border: 1px solid theme('colors.outline-variant');
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 24px 60px -20px rgba(22, 40, 57, 0.35);
+    }
+    .browser-titlebar {
+        background: theme('colors.surface-container-high');
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-bottom: 1px solid theme('colors.outline-variant');
+    }
+    .browser-dot { width: 10px; height: 10px; border-radius: 999px; background: theme('colors.outline-variant'); }
+    .addr-pill {
+        flex: 1;
+        background: theme('colors.surface-container-lowest');
+        border: 1px solid theme('colors.outline-variant');
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 13px;
+        color: theme('colors.on-surface-variant');
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+    .digit-swap {
+        position: relative;
+        display: inline-block;
+        color: theme('colors.error');
+        font-weight: 600;
+    }
+    .browser-body { padding: 28px 24px; background: theme('colors.surface-container-lowest'); }
+    .exposed-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px dashed theme('colors.outline-variant');
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 13px;
+    }
+    .exposed-row:last-child { border-bottom: none; }
+    .exposed-label { color: theme('colors.on-surface-variant'); }
+    .exposed-value { color: theme('colors.on-surface'); font-weight: 500; }
+
+    /* --- Horizon differentiation --- */
+    .horizon-1 { position: relative; }
+    .horizon-1::before {
+        content: "";
+        position: absolute;
+        left: -1px;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: repeating-linear-gradient(180deg, theme('colors.error') 0 6px, transparent 6px 12px);
+    }
+    .horizon-2::before {
+        content: "";
+        position: absolute;
+        left: -1px;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: theme('colors.outline-variant');
+    }
+    .clock-badge {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        letter-spacing: 0.05em;
+        padding: 3px 10px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .principle-tag {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 12px;
+        color: theme('colors.secondary');
+        background: theme('colors.secondary-container');
+        padding: 3px 10px;
+        border-radius: 4px;
+        display: inline-block;
+    }
+</style>
+</head>
+<body class="antialiased pb-24 md:pb-0">
+
+<header class="fixed top-0 w-full z-50 bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline transition-all duration-200 ease-in-out">
+  <div class="flex justify-between items-center px-margin-mobile md:px-gutter max-w-container-max mx-auto h-16">
+    <div class="flex items-center gap-4">
+      <button aria-label="Menu" class="text-primary dark:text-on-primary-container hover:text-secondary dark:hover:text-secondary-fixed transition-colors">
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">menu</span>
+      </button>
+    </div>
+    <div class="font-headline-md text-headline-md tracking-tighter text-primary dark:text-on-primary-container">BLOG</div>
+    <div class="flex items-center gap-4">
+      <div class="w-8 h-8 rounded-full overflow-hidden bg-surface-variant flex items-center justify-center text-primary border border-outline-variant">
+        <span class="material-symbols-outlined text-[20px]">person</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="pt-24 md:pt-32 px-margin-mobile md:px-gutter max-w-article-max mx-auto">
+<article>
+
+  <header class="mb-stack-lg">
+
+    <!-- SIGNATURE HERO: the exploit itself, not stock art -->
+    <div class="mb-stack-md">
+      <div class="browser-chrome">
+        <div class="browser-titlebar">
+          <span class="browser-dot"></span>
+          <span class="browser-dot"></span>
+          <span class="browser-dot"></span>
+          <div class="addr-pill">
+            <span class="material-symbols-outlined text-[14px] text-error">lock_open</span>
+            <span>campusconnect.app/profile/1048<span class="digit-swap">9</span></span>
+          </div>
+        </div>
+        <div class="browser-body">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="material-symbols-outlined text-error text-[20px]">warning</span>
+            <span class="font-label-caps text-label-caps text-error">record loaded — no ownership check</span>
+          </div>
+          <div class="exposed-row"><span class="exposed-label">student_number</span><span class="exposed-value">2021-••••7</span></div>
+          <div class="exposed-row"><span class="exposed-label">full_name</span><span class="exposed-value">[a stranger's name]</span></div>
+          <div class="exposed-row"><span class="exposed-label">phone</span><span class="exposed-value">+63 9•• ••• ••••</span></div>
+          <div class="exposed-row"><span class="exposed-label">id_photo.jpg</span><span class="exposed-value">200 OK</span></div>
+          <div class="exposed-row"><span class="exposed-label">gcash_receipt.png</span><span class="exposed-value">200 OK</span></div>
+          <div class="exposed-row"><span class="exposed-label">group_chat_thread</span><span class="exposed-value">200 OK</span></div>
+        </div>
+      </div>
+      <p class="font-meta text-meta text-on-surface-variant mt-3 text-center">One digit, typed by hand, was the entire attack.</p>
+    </div>
+
+    <h1 class="font-display-lg-mobile text-display-lg-mobile md:font-display-lg md:text-display-lg text-primary mb-stack-md">
+      The "Speed vs. Security" Trap: Lessons from a 72-Hour Breach
+    </h1>
+
+    <div class="flex items-center gap-4 font-meta text-meta text-on-surface-variant border-t border-b border-outline-variant py-4">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-[18px]">edit_document</span>
+        <span>Editorial Team</span>
+      </div>
+      <span class="w-1 h-1 rounded-full bg-outline"></span>
+      <div>October 26, 2023</div>
+      <span class="w-1 h-1 rounded-full bg-outline"></span>
+      <div>8 min read</div>
+    </div>
+  </header>
+
+  <div class="article-content font-body-lg text-body-lg text-on-surface">
+
+    <p class="font-headline-sm text-headline-sm text-primary mb-stack-md leading-relaxed italic">
+      In the modern development landscape, "moving fast and breaking things" is often celebrated as the hallmark of innovation. At a recent university hackathon, three students took this to heart, leveraging AI coding assistants to build a membership and payment platform for student organizations in under 72 hours. It worked. It won a prize. It gained users.
+    </p>
+    <p>Then it collapsed.</p>
+    <p>Word spread fast. Within a month, more than a dozen student organizations had adopted the app, and it was quietly holding real, sensitive data: full names, student numbers, phone numbers, GCash reference screenshots, uploaded ID photos, and private group chats. What began as a weekend demo had become production software for hundreds of students, without ever being treated like production software.</p>
+    <p>The exposure wasn't found by an attacker. It was found by a member who noticed that changing the number at the end of a profile link — from <code class="font-mono text-body-md bg-surface-container px-1 rounded">/profile/1048</code> to <code class="font-mono text-body-md bg-surface-container px-1 rounded">/profile/1049</code> — loaded a complete stranger's record: student number, contact details, and the photo of their uploaded ID. Curiosity led that same student to the project's public GitHub repository, where the database password and a payment API key were sitting in plain text inside an early commit. This post explores the technical debt that led to this exposure, the Secure Design Principles that were ignored, and how to rebuild such a system the "right way."</p>
+
+    <h2 class="font-headline-md text-headline-md text-primary mt-stack-xl mb-stack-md">The Anatomy of the Failure</h2>
+    <p>The platform suffered from several classic vulnerabilities that, while easy to implement for speed, are catastrophic in production:</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-stack-lg mt-stack-md">
+      <div class="p-6 rounded-DEFAULT border border-outline-variant bg-surface hover:shadow-sm transition-shadow duration-200">
+        <div class="flex items-center gap-3 mb-3 text-primary">
+          <span class="material-symbols-outlined">vpn_key_alert</span>
+          <h3 class="font-label-caps text-label-caps font-bold">Insecure Direct Object References (IDOR)</h3>
+        </div>
+        <p class="font-body-md text-body-md text-on-surface-variant m-0">Changing a URL parameter allowed users to view sensitive records of other students.</p>
+      </div>
+      <div class="p-6 rounded-DEFAULT border border-outline-variant bg-surface hover:shadow-sm transition-shadow duration-200">
+        <div class="flex items-center gap-3 mb-3 text-primary">
+          <span class="material-symbols-outlined">password</span>
+          <h3 class="font-label-caps text-label-caps font-bold">Hardcoded Credentials</h3>
+        </div>
+        <p class="font-body-md text-body-md text-on-surface-variant m-0">Database passwords and API keys were committed in plain text to a public GitHub repository.</p>
+      </div>
+      <div class="p-6 rounded-DEFAULT border border-outline-variant bg-surface hover:shadow-sm transition-shadow duration-200">
+        <div class="flex items-center gap-3 mb-3 text-primary">
+          <span class="material-symbols-outlined">gpp_bad</span>
+          <h3 class="font-label-caps text-label-caps font-bold">Broken Access Control</h3>
+        </div>
+        <p class="font-body-md text-body-md text-on-surface-variant m-0">Every account was provisioned with broad database read access.</p>
+      </div>
+      <div class="p-6 rounded-DEFAULT border border-outline-variant bg-surface hover:shadow-sm transition-shadow duration-200">
+        <div class="flex items-center gap-3 mb-3 text-primary">
+          <span class="material-symbols-outlined">leak_add</span>
+          <h3 class="font-label-caps text-label-caps font-bold">Information Leakage</h3>
+        </div>
+        <p class="font-body-md text-body-md text-on-surface-variant m-0">Detailed error pages (stack traces) were visible to any user.</p>
+      </div>
+      <div class="p-6 rounded-DEFAULT border border-outline-variant bg-surface hover:shadow-sm transition-shadow duration-200">
+        <div class="flex items-center gap-3 mb-3 text-primary">
+          <span class="material-symbols-outlined">wifi_off</span>
+          <h3 class="font-label-caps text-label-caps font-bold">No Transport Encryption</h3>
+        </div>
+        <p class="font-body-md text-body-md text-on-surface-variant m-0">The whole system ran over plain HTTP on a free hosting tier — IDs, phone numbers, and payment screenshots traveled unencrypted.</p>
+      </div>
+      <div class="p-6 rounded-DEFAULT border border-outline-variant bg-surface hover:shadow-sm transition-shadow duration-200">
+        <div class="flex items-center gap-3 mb-3 text-primary">
+          <span class="material-symbols-outlined">visibility_off</span>
+          <h3 class="font-label-caps text-label-caps font-bold">Security by Obscurity</h3>
+        </div>
+        <p class="font-body-md text-body-md text-on-surface-variant m-0">The team assumed that because nobody knew the internal URL structure, nobody would go looking. No real access control backed that assumption up.</p>
+      </div>
+    </div>
+
+    <h3 class="font-headline-sm text-headline-sm text-primary mb-stack-md">Violated Secure Design Principles</h3>
+    <ul class="list-none pl-0 space-y-4">
+      <li class="flex gap-4 items-start">
+        <span class="material-symbols-outlined text-secondary mt-1">check_circle</span>
+        <div><strong>Least Privilege:</strong> every account and database connection was provisioned with broad read access it never needed. A student's login had no business being able to query rows belonging to other students, but the system never distinguished between "authenticated" and "authorized."</div>
+      </li>
+      <li class="flex gap-4 items-start">
+        <span class="material-symbols-outlined text-secondary mt-1">layers</span>
+        <div><strong>Defense in Depth:</strong> there was exactly one layer standing between a stranger and hundreds of ID photos — an unguessable-looking number in a URL. When that one layer failed, nothing else caught the fall.</div>
+      </li>
+      <li class="flex gap-4 items-start">
+        <span class="material-symbols-outlined text-secondary mt-1">block</span>
+        <div><strong>Fail-Safe Defaults:</strong> the system's default behavior on an unrecognized or unverified request was to serve the data anyway. A secure default denies access until ownership is proven; this one granted it until someone objected.</div>
+      </li>
+      <li class="flex gap-4 items-start">
+        <span class="material-symbols-outlined text-secondary mt-1">rule</span>
+        <div><strong>Complete Mediation:</strong> every single request for a protected object should be checked, every time, with no exceptions. The <code class="font-mono text-body-md">/profile/:id</code> endpoint checked whether a user was logged in, but never whether the logged-in user was allowed to see <em>that specific</em> record.</div>
+      </li>
+      <li class="flex gap-4 items-start">
+        <span class="material-symbols-outlined text-secondary mt-1">visibility_off</span>
+        <div><strong>Open Design:</strong> security should never depend on attackers not knowing how the system works. Treating the URL structure as a secret, rather than building real authorization behind it, is the textbook violation of this principle — and it's exactly what "security by obscurity" means in practice.</div>
+      </li>
+    </ul>
+
+    <hr class="border-t border-outline-variant my-stack-lg"/>
+
+    <h2 class="font-headline-md text-headline-md text-primary mb-stack-md">Horizon 1: The Immediate Containment (Hours to Days)</h2>
+    <p>When a faculty adviser was shown the URL trick, the app was pulled offline. This was the correct first step. Here is the immediate tactical response required to stabilize the situation — dense, urgent, and sequenced by how fast the exposure can keep growing if left alone:</p>
+
+    <div class="horizon-1 pl-6 space-y-stack-md">
+      <div>
+        <span class="clock-badge bg-error-container text-on-error-container mb-2"><span class="material-symbols-outlined text-[14px]">power_settings_new</span>Hour 0</span>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2 mt-1">Take the System Offline and Freeze New Signups</h4>
+        <span class="principle-tag mb-2">Restores: Fail-Safe Defaults</span>
+        <p class="font-body-md text-body-md">This is what the faculty adviser correctly did the same afternoon. Every hour the app stays reachable, the sequential-ID scan can keep running. The default state while the system is untrusted has to be "off," not "on until proven dangerous."</p>
+      </div>
+      <div>
+        <span class="clock-badge bg-error-container text-on-error-container mb-2"><span class="material-symbols-outlined text-[14px]">key_off</span>Hour 0–2</span>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2 mt-1">Revoke and Rotate All Secrets</h4>
+        <span class="principle-tag mb-2">Restores: Secure Secrets Management</span>
+        <p class="font-body-md text-body-md">The database password and the GCash payment API key found in the GitHub commit history are compromised forever, even after the commit is deleted, because git history is trivially recoverable. Generate new credentials for every service and store them in environment variables, never in source control.</p>
+      </div>
+      <div>
+        <span class="clock-badge bg-error-container text-on-error-container mb-2"><span class="material-symbols-outlined text-[14px]">verified_user</span>Day 1</span>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2 mt-1">Patch the IDOR With a Real Ownership Check</h4>
+        <span class="principle-tag mb-2">Restores: Complete Mediation</span>
+        <p class="font-body-md text-body-md">Before the app goes back online, every route that reads or writes a record must confirm the requesting user actually owns — or is explicitly permitted to view — that record, not just that they're logged in. A single shared authorization middleware, applied to every data route without exception, closes the door the URL-swap trick walked through.</p>
+      </div>
+      <div>
+        <span class="clock-badge bg-error-container text-on-error-container mb-2"><span class="material-symbols-outlined text-[14px]">bug_report</span>Day 1</span>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2 mt-1">Turn Off Verbose Errors in Production</h4>
+        <span class="principle-tag mb-2">Restores: Least Privilege / Information Hiding</span>
+        <p class="font-body-md text-body-md">Stack traces are a debugging convenience, not a public feature. Replace them with a generic error message for users, and route the real detail to a private, access-controlled log instead — a stack trace tells an attacker exactly which framework, file paths, and query structure to target next.</p>
+      </div>
+      <div>
+        <span class="clock-badge bg-error-container text-on-error-container mb-2"><span class="material-symbols-outlined text-[14px]">encrypted</span>Day 1–2</span>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2 mt-1">Force TLS and Reset User Sessions</h4>
+        <span class="principle-tag mb-2">Restores: Confidentiality in Transit</span>
+        <p class="font-body-md text-body-md">Most free hosting tiers offer HTTPS with a single configuration flag — there is no excuse for launching without it. Invalidate all existing sessions so the relaunch starts from a clean slate rather than trusting cookies issued under the old, unencrypted setup.</p>
+      </div>
+      <div>
+        <span class="clock-badge bg-error-container text-on-error-container mb-2"><span class="material-symbols-outlined text-[14px]">campaign</span>Day 2–3</span>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2 mt-1">Notify Affected Students — and the NPC</h4>
+        <span class="principle-tag mb-2">Legal Obligation: RA 10173 Breach Notification</span>
+        <p class="font-body-md text-body-md">Under the Data Privacy Act and NPC Circular 16-03, a personal information controller must notify both the National Privacy Commission and affected data subjects when a breach is likely to give rise to real risk of serious harm — generally within 72 hours of learning about it. Sensitive personal information (IDs, contact details) and financial data (GCash records) both clear that bar. Silence isn't a neutral option here; it's a separate violation on top of the breach itself.</p>
+      </div>
+    </div>
+
+    <hr class="border-t border-outline-variant my-stack-lg"/>
+
+    <h2 class="font-headline-md text-headline-md text-primary mb-stack-md">Horizon 2: Rebuilding the Right Way (Long-term Design)</h2>
+    <p>Restoring the app isn't just about patching bugs; it's about a structural shift in how data is handled. These changes are slower and quieter than Horizon 1's triage, but they're what actually keeps the next IDOR, the next leaked key, and the next silent HTTP request from happening again.</p>
+
+    <div class="horizon-2 pl-6 space-y-stack-md">
+      <div>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2">Authorization as a Layer, Not a Habit</h4>
+        <span class="principle-tag mb-2">Restores: Complete Mediation</span>
+        <p class="font-body-md text-body-md">Move ownership checks out of individual route handlers and into a single, shared authorization layer every request passes through. When the check lives in one place instead of being re-implemented (or forgotten) per endpoint, one missed <code class="font-mono text-body-md">if</code> statement can't reopen the same hole.</p>
+      </div>
+      <div>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2">Scoped, Least-Privilege Database Roles</h4>
+        <span class="principle-tag mb-2">Restores: Least Privilege</span>
+        <p class="font-body-md text-body-md">Replace the single superuser connection string with narrow service accounts — a read-only role for reporting, a scoped write role for the app server — so that even a fully leaked credential can't hand over the entire database.</p>
+      </div>
+      <div>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2">Secrets Stay Out of Git, Structurally</h4>
+        <span class="principle-tag mb-2">Restores: Secure Secrets Management</span>
+        <p class="font-body-md text-body-md">Pair environment-variable secrets with a pre-commit hook (tools like gitleaks or git-secrets) that scans every commit for credential-shaped strings and blocks it before it ever reaches GitHub — turning "don't hardcode secrets" from a rule people can forget into a rule the tooling enforces.</p>
+      </div>
+      <div>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2">Monitoring for the Next Sequential Scan</h4>
+        <span class="principle-tag mb-2">Restores: Defense in Depth</span>
+        <p class="font-body-md text-body-md">Structured logging and basic anomaly alerts — one account requesting a thousand sequential profile IDs in a minute, for instance — give the team a second layer that catches what authorization checks miss, instead of relying on a curious student to notice by accident.</p>
+      </div>
+      <div>
+        <h4 class="font-headline-sm text-headline-sm text-primary mb-2">Store Less, Encrypt What Remains</h4>
+        <span class="principle-tag mb-2">Restores: Data Minimization</span>
+        <p class="font-body-md text-body-md">Does the app need to keep raw ID photos and GCash screenshots indefinitely, or only long enough to verify a payment? Purge what's no longer needed, encrypt what must be retained at rest, and treat every stored field as a liability the org has to justify keeping — not a free byproduct of collecting it once.</p>
+      </div>
+    </div>
+
+    <h3 class="font-headline-sm text-headline-sm text-primary mt-stack-lg mb-stack-md">Auditing What the AI Actually Wrote</h3>
+    <p>The team's mistake wasn't using an AI coding assistant — it was trusting its output the way you'd trust a senior engineer's. An AI assistant optimizes for whatever it was asked to do: "build a membership and payment platform" produces working CRUD routes, a working login flow, working file uploads. Nothing in that prompt asked for object-level authorization on every route, so the model didn't add it. Nothing asked for scoped database roles, so it defaulted to one connection string with broad access, because that's what makes a demo run in 72 hours. The code was plausible, it compiled, it passed the happy-path test of "does clicking around work" — and it still shipped every one of the failures above.</p>
+    <p>The fix is a review step scoped specifically to what AI-generated code tends to skip: does every data-returning route check ownership, not just login state? Are credentials externalized? Do error handlers fail generically in production? Is there a rate limit or anomaly check on anything sequential or enumerable? Treat AI output as a fast first draft from a contractor who has no stake in the consequences — useful, often correct, and never a substitute for a human threat-modeling the result before it touches real students' data.</p>
+
+    <div class="my-stack-xl glass-panel p-8 rounded-DEFAULT relative overflow-hidden">
+      <div class="absolute top-0 left-0 w-2 h-full bg-primary"></div>
+      <div class="flex items-center gap-3 mb-4">
+        <span class="material-symbols-outlined text-primary text-[32px]">gavel</span>
+        <h3 class="font-headline-sm text-headline-sm text-primary m-0">The Ethical and Legal Mandate</h3>
+      </div>
+      <p class="font-body-md text-body-md text-on-surface">As developers in the Philippines, we operate under <strong>Republic Act No. 10173</strong>, also known as the <strong>Data Privacy Act of 2012 (DPA)</strong>.</p>
+      <p class="font-body-md text-body-md text-on-surface">Under the DPA, developers and organizations have a legal obligation to implement "reasonable and appropriate organizational, physical, and technical measures intended for the protection of personal information." That obligation doesn't pause for a hackathon deadline, and it doesn't transfer away because the code was AI-generated or the hosting was free. The three students, as the people who designed the system's access rules, are the ones the law treats as accountable for whether student data stayed protected — the org that adopted the app for membership dues shares that accountability the moment it collects a member's ID photo through it.</p>
+      <p class="font-body-md text-body-md text-on-surface">The DPA's <strong>Accountability</strong> principle means responsibility follows the data, not the org chart — you don't get to outsource it to "the AI wrote that part." Its <strong>Proportionality</strong> and data-minimization principles are exactly what should have stopped indefinite storage of raw ID photos and GCash screenshots in the first place. And its breach-notification rule under <strong>NPC Circular 16-03</strong> is not optional paperwork; it's the mechanism that lets affected students actually protect themselves — watch for identity misuse, cancel a payment, change a password — instead of finding out secondhand.</p>
+    </div>
+
+    <h2 class="font-headline-md text-headline-md text-primary mb-stack-md">Conclusion: Shipping Fast vs. Shipping Right</h2>
+    <p>The "72-hour prototype" is a great learning tool, but it is rarely production-ready. We must weigh the desire to "ship fast" against the fundamental right to privacy of the people whose data we hold. A prize at a hackathon measures whether something works over a weekend; it says nothing about whether it's safe to hand to a dozen student organizations a month later.</p>
+    <p>In the age of AI, the barrier to entry for coding has dropped, but the responsibility for the consequences of that code has never been higher. An assistant will happily generate an endpoint that logs a user in, stores a payment screenshot, and returns a profile by ID — all correctly, by the definition of "does it run." Whether that endpoint checks who's asking, whether that screenshot is encrypted, whether that ID lookup is authorized — that's a design decision no prompt makes for you. It's the developer's, every time, and under RA 10173 it's a legal one as much as a technical one. A system that "runs" but exposes its users isn't a success; it's a liability, and increasingly, it's a breach the law expects you to have prevented.</p>
+
+  </div>
+</article>
+</main>
+
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center h-16 bg-surface dark:bg-surface-container-high pb-safe border-t border-outline-variant dark:border-outline z-50 transition-all duration-200 ease-in-out">
+  <a class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed font-bold scale-95 active:scale-90 transition-transform" href="#">
+    <span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">home</span>
+    <span class="font-label-caps text-label-caps">Home</span>
+  </a>
+  <a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline hover:bg-surface-container-low dark:hover:bg-surface-container scale-95 active:scale-90 transition-transform px-4 py-1 rounded-DEFAULT" href="#">
+    <span class="material-symbols-outlined mb-1">search</span>
+    <span class="font-label-caps text-label-caps">Search</span>
+  </a>
+  <a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline hover:bg-surface-container-low dark:hover:bg-surface-container scale-95 active:scale-90 transition-transform px-4 py-1 rounded-DEFAULT" href="#">
+    <span class="material-symbols-outlined mb-1">person</span>
+    <span class="font-label-caps text-label-caps">Profile</span>
+  </a>
+</nav>
+
+</body>
+</html>
